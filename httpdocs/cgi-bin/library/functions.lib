@@ -1,0 +1,389 @@
+package functions;
+
+sub is_development_site {
+    $ENV{HTTP_HOST} =~ /^development\.funds\./i || $ENV{LOGNAME} eq 'cflc_dev';
+}
+
+sub is_demo_site {
+    $ENV{HTTP_HOST} =~ /^funds\./i || $ENV{LOGNAME} eq 'cflc_web';
+}
+
+sub is_production_site {
+    0;
+    # $ENV{HTTP_HOST} =~ /^funds\./i || $ENV{LOGNAME} eq 'cflc_web';
+}
+
+sub FilterNeg {
+    local( $fd ) = @_;
+    $fd =~ s/[\<\>\"\'\%\;\)\(\&\+]//g;
+    $fd =~ s#\.\.##g;
+    return( $fd ) ;
+}
+
+sub FilterPos {
+    local( $fd ) = @_;
+    $fd =~ tr/A-Za-z0-9\ //dc;
+    return( $fd ) ;
+}
+
+sub url_encode {
+    my ($url) = @_;
+    $url =~ s/([^A-Za-z0-9\-_])/sprintf("%%%02X", ord($1))/seg;
+    return($url);
+}
+
+sub url_decode {
+    my ($url) = @_;
+    $url =~ s{%([a-fA-F0-9][a-fA-F0-9])}{pack("C", hex($1))}eg;
+    return($url);
+}
+
+sub make_unique_array {
+    my $array = shift;
+    my %Seen = ();
+    @{$array} = grep {!$Seen{$_}++} @{$array};
+}
+
+sub authDecode64 {
+    local($encoded) = @_;
+    local($len, $decoded);
+
+    # courtesy Programming Perl book (2nd edition), page 237
+    $encoded =~ tr#A-Za-z0-9+\/##cd;
+    $encoded =~ tr#A-Za-z0-9+\/# -_#;
+    $len = pack("c", 32 + 0.75 * length($encoded));
+    $decoded = unpack("u", $len . $encoded);
+    return($decoded);
+}
+
+sub authEncode64 {
+    local($string) = @_;
+    local($len, $i, $encoded, @base64set);
+
+    @base64set = ('A' .. 'Z', 'a' .. 'z', '0' .. '9', '+', '/');
+
+    $encoded = "";
+    $len = length($string);
+    while ($len > 0) {
+        if ($len > 0) {
+            $i |= ord(substr($string, 0, 1));
+        }
+        $i <<= 8;
+        if ($len > 1) {
+            $i |= ord(substr($string, 1, 1));
+        }
+        $i <<= 8;
+        if ($len > 2) {
+            $i |= ord(substr($string, 2, 1));
+            $encoded .= $base64set[($i >> 18) & 0x3F];
+            $i <<= 6;
+        }
+        if ($len > 1) {
+            $encoded .= $base64set[($i >> 18) & 0x3F];
+            $i <<= 6;
+        }
+        if ($len > 0) {
+            $encoded .= $base64set[($i >> 18) & 0x3F];
+            $i <<= 6;
+        }
+        $encoded .= $base64set[($i >> 18) & 0x3F];
+        $encoded .= "=" x (3 - $len);
+        $string = substr($string, 3);
+        $len = length($string);
+    }
+    return($encoded);
+}
+
+sub _format_date() {
+
+my $dt = shift;
+
+my ($m,$d,$Y) = split(/[^\d]/, $dt);
+
+if ($m && $d && $Y) {
+return (sprintf("%04d/%02d/%02d", $Y, $m, $d));
+}
+else {
+return ($dt);
+}
+}
+
+sub _format_number() {
+
+my $nm = shift;
+
+$nm =~ s/[^0-9\.\-]//g;
+if (!$nm) {
+$nm = '0.00';
+}
+return ($nm);
+
+}
+
+
+sub _format_fund_id() {
+
+my $nm = shift;
+
+$nm =~ s/[^0-9]//g;
+return ($nm);
+
+}
+
+sub _last_updated_words {
+
+    my ($daysdiff, $hoursdiff, $minutediff, $dateformat) = @_;
+
+    my $difference = '';
+
+    if ($daysdiff || $hoursdiff || $minutediff || $dateformat) {
+
+    # get difference text
+    if ($daysdiff >= 90) {
+         $difference = qq~$dateformat~;
+
+    }
+    elsif ($daysdiff >= 60) {
+    $difference = q~3 months ago~;
+    }
+    elsif ($daysdiff >= 30) {
+    $difference = q~2 months ago~;
+    }
+    elsif ($daysdiff >= 21) {
+    $difference = q~4 weeks ago~;
+    }
+    elsif ($daysdiff >= 14) {
+    $difference = q~3 weeks ago~;
+    }
+    elsif ($daysdiff >= 7) {
+    $difference = q~2 weeks ago~;
+    }
+    elsif ($daysdiff >= 3) {
+
+        $daysdiff   =~ s/^0//;
+
+        $difference = qq~$daysdiff days ago~;
+
+    } elsif ($hoursdiff >= 1) {
+
+        $hoursdiff  =~ s/^0//;
+
+        my $ess = "s" if ($hoursdiff > 1);
+        $difference = qq~$hoursdiff hour$ess ago~;
+
+    } else {
+
+        $minutediff += 60 if ($hoursdiff == 1);
+
+
+
+        if ($minutediff < 1) {
+
+            $difference = qq~ &lt; 1 minute ago~;
+
+        } elsif ($minutediff < 2) {
+
+            $difference = qq~1 minute ago~;
+
+        } else {
+
+            $minutediff  =~ s/^0//;
+
+            $difference  = qq~$minutediff minutes ago~;
+
+        }
+
+    }
+
+   }
+    return($difference);
+
+}
+
+ sub header_info() {
+
+
+ my $skip_part = shift;
+ my $return_header = "";
+open FILE, "<", "$ENV{DOCUMENT_ROOT}/includes/doctype.shtml" or die $!;
+while (<FILE>) {
+$return_header .= $_;
+}
+close(FILE);
+
+
+
+open FILE2, "<", "$ENV{DOCUMENT_ROOT}/includes/header.shtml";
+while (<FILE2>) {
+$return_header .=  $_;
+}
+close(FILE2);
+
+ if (!$skip_part) {
+ use LWP::Simple(get);
+ $return_header .= get("http://$ENV{HTTP_HOST}/cgi-bin/navigation.cgi");
+
+ $return_header .= q~<div class="container">
+ <div class="wel_cont_box">
+ <div class="edit_box">~;
+  }
+
+return ($return_header);
+
+
+
+
+ }
+
+
+ sub footer_info() {
+
+ my $return_footer = "";
+ my $skip_part = shift;
+
+ if (!$skip_part) {
+ $return_footer .= q~
+ <div style="text-align:center;" ><a href="/" id="cancellink">return</a></div>
+ <div class="clear"></div></div>
+ <div class="clear"></div>
+ </div>
+ </div>
+ ~;
+ }
+  open FILE3, "<", "$ENV{DOCUMENT_ROOT}/includes/footer.shtml";
+while (<FILE3>) {
+$return_footer .= $_;
+}
+close(FILE3);
+
+
+return($return_footer);
+
+
+
+ }
+
+
+ sub return_javascript_notice($) {
+
+my $message = shift;
+
+my $return = "";
+
+$return .= qq~ <div id="notice_info"></div>
+<script type="text/javascript" src="/includes/dialog_box.js"></script>
+<script language="javascript" type="text/javascript">
+<!--
+// <![CDATA[
+function find_position(obj) {
+    if (obj.offsetParent) {
+        this.left = obj.offsetLeft
+        this.top = obj.offsetTop
+        while (obj = obj.offsetParent) {
+            this.left += obj.offsetLeft
+            this.top += obj.offsetTop
+        }
+    }
+    this.left-=100;
+    }
+// view help
+function view_help(obj, contents) {
+    //var pos = new find_position(obj);
+var top = screen.height *.30;
+var left = screen.width*.20;
+
+    box = new DialogBox(
+        'help', // name
+        0,      // close button
+        1,      // fade
+        '',     // close listener
+        {'padding':'5px','backgroundColor':'#FFFFFF','border':'solid 3px #420000'}  // style options
+    );
+    box.setSize(500,300);
+    box.setContents(contents);
+    box.show();
+    box.moveTo(left, top, 1);
+}
+
+function hide_box() {
+    box.hide();
+    var x = document.getElementsByTagName("select");
+    for (i = 0; i < x.length; i++) {
+   x[i].style.display = "";
+// or
+// x[i].style.visibility = "hidden"
+}
+}
+
+
+function show_info() {
+var x = document.getElementsByTagName("select");
+
+for (i = 0; i < x.length; i++) {
+   x[i].style.display = "none";
+// or
+// x[i].style.visibility = "hidden"
+}
+
+
+var message = '<p>$message</p>';
+
+view_help('notice_info', '<div style="float: right;padding-top:0px;padding-right:0px;"><a href="#" onClick="hide_box(); return false;">Close</a></div><br><div style="padding:10px;text-align:left;">'+message+'</div><br><div style="padding:4px;text-align:center;"><a href="#" onClick="hide_box(); return false;">Close</a></div></div>');
+
+
+
+
+}
+
+//show_info();
+
+function doPrint() {
+delay = 1;    // time in seconds before popup opens
+timer = setTimeout("show_info()", delay*1000);
+}
+
+
+doPrint();
+// ]]>
+// -->
+
+</script>
+~;
+}
+
+sub format {
+    my ($text) = @_;
+    $$text =~ s/\r//g;
+    $$text =~ s/\cM//g;
+    $$text =~ s/\n\n/<p>/g;
+    $$text =~ s/\n/<br>/g;
+    $$text =~ s/<br> <br>/\n<p>\n/g;
+    $$text =~ s/<p>/\n<p>\n/g;
+    $$text =~ s/<br>/\n<br>\n/g;
+}
+
+sub save_file {
+    my ($path, $contents) = @_;
+    
+    my $LOCK_EXCLUSIVE = 2;
+    my $UNLOCK         = 8;
+    
+    # Write
+    open (FILE, ">$ENV{DOCUMENT_ROOT}$path");
+        flock FILE, $LOCK_EXCLUSIVE;
+        print FILE $contents;
+        flock FILE, $UNLOCK;
+    close(FILE);
+}
+
+sub generate_fake_email {
+    my $rand = int(rand(1000000));
+    $rand .= ".$$";
+    "noemailmetropks\@$rand\.temp";
+}
+
+sub is_fake_email {
+    shift =~ /^noemailmetropks\@/
+}
+
+1;
